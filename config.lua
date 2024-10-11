@@ -5,6 +5,7 @@ Config.DrawDistance = 50
 Config.ExperiencePerPoint = 10
 Config.MoneyPerPoint = 50
 
+Config.DailyTaskLimit = 10
 Config.Vehicle = 'mower'
 Config.VehicleSpawn = vector4(-42.0131, -412.1090, 40.3985, 69.7127)
 
