@@ -1,33 +1,27 @@
 ESX.RegisterServerCallback('rlo_gardening:callback:checkJobStatistics', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
-    local data = MySQL.single.await('SELECT `experience` FROM `skills_gardening` WHERE `identifier` = ? LIMIT 1', { xPlayer.getIdentifier() })
-    
-    if not data then 
-        MySQL.insert.await('INSERT INTO `skills_gardening` (identifier) VALUES (?)', { xPlayer.getIdentifier() })
-        if Config.Debug then print('Successfully registered gardening skill for:', xPlayer.getIdentifier()) end
-        cb(nil)
-        return
-    end
-
-    cb(data.experience)
+    local result = MySQL.single.await('SELECT experience FROM users WHERE identifier = ?', { xPlayer.getIdentifier() })
+    cb(result and result.experience or nil)
 end)
 
-RegisterNetEvent('rlo_gardening:server:redeemPoints', function(collectedPoints)
+ESX.RegisterServerCallback('rlo_gardening:callback:checkDailyTasks', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
-    local recievedExperience = (collectedPoints * Config.ExperiencePerPoint)
-    local recievedMoney = (collectedPoints * Config.MoneyPerPoint)
-
-    local result = MySQL.single.await('SELECT experience FROM skills_gardening WHERE identifier = ?', { xPlayer.getIdentifier() })
-    if result then
-        local currentExperience = result.experience
-        local newExperience = currentExperience + recievedExperience
-
-        MySQL.update.await('UPDATE skills_gardening SET experience = ? WHERE identifier = ?', {
-            newExperience, xPlayer.getIdentifier()
-        })
-
-        xPlayer.addMoney(recievedMoney)
-        xPlayer.showNotification('You recieved ~g~'..recievedExperience..' Experience~s~ and ~y~'..recievedMoney..' Dollar~s~ for ~b~'..collectedPoints..' Garden Points~s~!')
-    end
+    local result = MySQL.single.await('SELECT tasks FROM daily_tasks WHERE identifier = ? AND date = CURDATE()', { xPlayer.getIdentifier() })
+    cb(not result or result.tasks < Config.DailyTaskLimit)
 end)
 
+RegisterServerEvent('rlo_gardening:server:redeemPoints', function(points)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    local currentExperience = MySQL.single.await('SELECT experience FROM users WHERE identifier = ?', { xPlayer.getIdentifier() }).experience or 0
+    local newExperience = currentExperience + points * 50
+
+    MySQL.update.await('UPDATE users SET experience = ? WHERE identifier = ?', { newExperience, xPlayer.getIdentifier() })
+    xPlayer.addMoney(points * Config.Payout)
+
+    local newLevel = math.floor(newExperience / 1000)
+    if newLevel > math.floor(currentExperience / 1000) then
+        xPlayer.showNotification('You reached ~b~Level ' .. newLevel .. '~s~! Keep up the good work!')
+    end
+
+    MySQL.update.await('INSERT INTO daily_tasks (identifier, date, tasks) VALUES (?, CURDATE(), 1) ON DUPLICATE KEY UPDATE tasks = tasks + 1', { xPlayer.getIdentifier() })
+end)
